@@ -4,6 +4,7 @@
 2D Controller Class to be used for the CARLA waypoint follower demo.
 """
 
+from calendar import c
 from ctypes import set_errno
 from re import U
 import cutils
@@ -193,7 +194,47 @@ class Controller2D(object):
                 access the persistent variables declared above here. For
                 example, can treat self.vars.v_previous like a "global variable".
             """
-            # TODO
+            # voodoo constants
+            Ke = 0.3
+
+            x_prev, y_prev, _ = waypoints[0]
+            x_next, y_next, _ = waypoints[-1]
+
+            expected_yaw = np.arctan2(y_next - y_prev, x_next - x_prev)
+            heading_error = expected_yaw - yaw
+            if heading_error > np.pi:
+                heading_error -= 2 * np.pi
+            if heading_error < - np.pi:
+                heading_error += 2 * np.pi
+
+            coord_curr = np.array([x, y])
+            # find the closest point between the expected path and the vehicle
+            cross_track_error = np.min(np.sum((coord_curr - np.array(waypoints)[:, :2])**2, axis=1))
+
+            cross_track_yaw = np.arctan2(y - y_prev, x - x_prev)
+            cross_track_yaw_error = expected_yaw - cross_track_yaw
+            if cross_track_yaw_error > np.pi:
+                cross_track_yaw_error -= 2 * np.pi
+            if cross_track_yaw_error < -np.pi:
+                cross_track_yaw_error += 2 * np.pi
+            
+            # check orientation
+            if cross_track_yaw_error > 0:
+                cross_track_error = abs(cross_track_error)
+            else:
+                cross_track_error = -abs(cross_track_error)
+
+            cross_track_steering = np.arctan2(Ke * cross_track_error, v)
+
+            steer_output = cross_track_steering + heading_error
+            if steer_output > np.pi:
+                steer_output -= 2 * np.pi
+            if steer_output < - np.pi:
+                steer_output += 2 * np.pi
+
+            # check bounds
+            steer_output = min(1.22, steer_output)
+            steer_output = max(-1.22, steer_output)
 
             ######################################################
             # SET CONTROLS OUTPUT
